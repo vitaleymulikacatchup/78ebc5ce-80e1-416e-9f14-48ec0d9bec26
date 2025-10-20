@@ -96,7 +96,6 @@ export default function Page() {
               id: "1",
               name: "Sarah Johnson",
               role: "CEO",
-              company: "TechCorp",
               testimonial: "Exceptional service and technology.",
               imageSrc: assetMap.find(a => a.id === "testimonial-1")?.url ?? "/public/images/placeholder.webp"
             },
@@ -104,7 +103,6 @@ export default function Page() {
               id: "2",
               name: "Michael Chen",
               role: "CTO",
-              company: "InnovateLab",
               testimonial: "Transformed our IT infrastructure.",
               imageSrc: assetMap.find(a => a.id === "testimonial-2")?.url ?? "/public/images/placeholder.webp"
             },
@@ -112,7 +110,6 @@ export default function Page() {
               id: "3",
               name: "Emily Rodriguez",
               role: "Marketing Director",
-              company: "GrowthCo",
               testimonial: "Seamless collaboration and support.",
               imageSrc: assetMap.find(a => a.id === "testimonial-3")?.url ?? "/public/images/placeholder.webp"
             },
@@ -120,7 +117,6 @@ export default function Page() {
               id: "4",
               name: "David Kim",
               role: "Product Manager",
-              company: "StartupXYZ",
               testimonial: "Innovative solutions delivered on time.",
               imageSrc: assetMap.find(a => a.id === "testimonial-4")?.url ?? "/public/images/placeholder.webp"
             }
