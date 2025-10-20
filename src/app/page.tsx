@@ -1,4 +1,4 @@
-use client"
+"use client";
 import { ThemeProvider } from "@/providers/ThemeProvider";
 import NavbarLayoutFloatingInline from '@/components/navbar/NavbarLayoutFloatingInline';
 import HeroBillboard from '@/components/sections/hero/HeroBillboard';
@@ -37,9 +37,9 @@ export default function Page() {
       <div id="nav" data-section="nav">
         <NavbarLayoutFloatingInline
           navItems={[
-            { name: "Home", id: "home" },
+            { name: "Home", id: "hero" },
             { name: "About", id: "about" },
-            { name: "Services", id: "services" },
+            { name: "Services", id: "feature" },
             { name: "Contact", id: "contact" }
           ]}
           brandName="Webild"
