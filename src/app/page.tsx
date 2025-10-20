@@ -1,4 +1,4 @@
-use client
+"use client";
 
 import { ThemeProvider } from "@/providers/ThemeProvider";
 import NavbarLayoutFloatingInline from '@/components/navbar/NavbarLayoutFloatingInline';
@@ -38,9 +38,9 @@ export default function Page() {
       <div id="nav" data-section="nav">
         <NavbarLayoutFloatingInline
           navItems={[
-            { name: "Home", id: "home" },
+            { name: "Home", id: "hero" },
             { name: "About", id: "about" },
-            { name: "Services", id: "services" },
+            { name: "Services", id: "feature" },
             { name: "Contact", id: "contact" }
           ]}
           brandName="Webild"
@@ -50,7 +50,7 @@ export default function Page() {
         <HeroBillboard
           title="Innovate with Us"
           description="Empowering your business with cutting-edge IT solutions."
-          imageSrc={assetMap.find(a => a.id === "hero-image")?.url ?? "/public/images/placeholder.webp"}
+          imageSrc="https://images.pexels.com/photos/1181263/pexels-photo-1181263.jpeg?auto=compress&cs=tinysrgb&h=650&w=940"
           buttons={[
             { text: "Get Started", href: "#services" },
             { text: "Learn More", href: "#about" }
@@ -65,7 +65,7 @@ export default function Page() {
             { title: "Expert Team", description: "Dedicated to excellence.", icon: Award },
             { title: "Global Reach", description: "Serving clients everywhere.", icon: Globe }
           ]}
-          imageSrc={assetMap.find(a => a.id === "about-image")?.url ?? "/public/images/placeholder.webp"}
+          imageSrc="https://images.pexels.com/photos/3183197/pexels-photo-3183197.jpeg?auto=compress&cs=tinysrgb&h=650&w=940"
         />
       </div>
       <div id="feature" data-section="feature">
@@ -77,13 +77,13 @@ export default function Page() {
               id: "01",
               title: "Custom Solutions",
               description: "Tailored solutions for your business needs.",
-              imageSrc: assetMap.find(a => a.id === "feature-image-1")?.url ?? "/public/images/placeholder.webp"
+              imageSrc: "https://images.pexels.com/photos/34317747/pexels-photo-34317747.jpeg?auto=compress&cs=tinysrgb&h=650&w=940"
             },
             {
               id: "02",
               title: "Reliable Infrastructure",
               description: "Robust and scalable technologies.",
-              imageSrc: assetMap.find(a => a.id === "feature-image-2")?.url ?? "/public/images/placeholder.webp"
+              imageSrc: "https://images.pexels.com/photos/1148820/pexels-photo-1148820.jpeg?auto=compress&cs=tinysrgb&h=650&w=940"
             }
           ]}
         />
@@ -99,7 +99,7 @@ export default function Page() {
               role: "CEO",
               company: "TechCorp",
               testimonial: "Exceptional service and technology.",
-              imageSrc: assetMap.find(a => a.id === "testimonial-1")?.url ?? "/public/images/placeholder.webp"
+              imageSrc: "https://images.pexels.com/photos/3183197/pexels-photo-3183197.jpeg?auto=compress&cs=tinysrgb&h=650&w=940"
             },
             {
               id: "2",
@@ -107,7 +107,7 @@ export default function Page() {
               role: "CTO",
               company: "InnovateLab",
               testimonial: "Transformed our IT infrastructure.",
-              imageSrc: assetMap.find(a => a.id === "testimonial-2")?.url ?? "/public/images/placeholder.webp"
+              imageSrc: "https://images.pexels.com/photos/34345272/pexels-photo-34345272.jpeg?auto=compress&cs=tinysrgb&h=650&w=940"
             },
             {
               id: "3",
@@ -115,7 +115,7 @@ export default function Page() {
               role: "Marketing Director",
               company: "GrowthCo",
               testimonial: "Seamless collaboration and support.",
-              imageSrc: assetMap.find(a => a.id === "testimonial-3")?.url ?? "/public/images/placeholder.webp"
+              imageSrc: "https://images.pexels.com/photos/6963857/pexels-photo-6963857.jpeg?auto=compress&cs=tinysrgb&h=650&w=940"
             },
             {
               id: "4",
@@ -123,7 +123,7 @@ export default function Page() {
               role: "Product Manager",
               company: "StartupXYZ",
               testimonial: "Innovative solutions delivered on time.",
-              imageSrc: assetMap.find(a => a.id === "testimonial-4")?.url ?? "/public/images/placeholder.webp"
+              imageSrc: "https://images.pexels.com/photos/3183150/pexels-photo-3183150.jpeg?auto=compress&cs=tinysrgb&h=650&w=940"
             }
           ]}
         />
@@ -133,12 +133,12 @@ export default function Page() {
           title="Trusted by Industry Leaders"
           description="Join numerous satisfied partners."
           logos={[
-            assetMap.find(a => a.id === "social-proof-company1")?.url ?? "/public/images/placeholder.webp",
-            assetMap.find(a => a.id === "social-proof-company2")?.url ?? "/public/images/placeholder.webp",
-            assetMap.find(a => a.id === "social-proof-company3")?.url ?? "/public/images/placeholder.webp",
-            assetMap.find(a => a.id === "social-proof-company4")?.url ?? "/public/images/placeholder.webp",
-            assetMap.find(a => a.id === "social-proof-company5")?.url ?? "/public/images/placeholder.webp",
-            assetMap.find(a => a.id === "social-proof-company6")?.url ?? "/public/images/placeholder.webp"
+            "https://images.pexels.com/photos/10142683/pexels-photo-10142683.jpeg?auto=compress&cs=tinysrgb&h=650&w=940",
+            "https://images.pexels.com/photos/218717/pexels-photo-218717.jpeg?auto=compress&cs=tinysrgb&h=650&w=940",
+            "https://images.pexels.com/photos/267399/pexels-photo-267399.jpeg?auto=compress&cs=tinysrgb&h=650&w=940",
+            "https://images.pexels.com/photos/4560039/pexels-photo-4560039.jpeg?auto=compress&cs=tinysrgb&h=650&w=940",
+            "https://images.pexels.com/photos/544295/pexels-photo-544295.jpeg?auto=compress&cs=tinysrgb&h=650&w=940",
+            "https://images.pexels.com/photos/7661590/pexels-photo-7661590.jpeg?auto=compress&cs=tinysrgb&h=650&w=940"
           ]}
         />
       </div>
@@ -157,7 +157,7 @@ export default function Page() {
         <FooterLogoEmphasis
           columns={[
             { items: [{ label: "About", href: "about" }] },
-            { items: [{ label: "Services", href: "services" }] },
+            { items: [{ label: "Services", href: "feature" }] },
             { items: [{ label: "Contact", href: "contact" }] }
           ]}
           logoText="Webild"
