@@ -12,7 +12,7 @@ import {
   Nunito
 } from "next/font/google";
 import "./globals.css";
-import { PostHogWrapper } from "@/components/PostHogWrapper";
+import {PostHogWrapper} from "@/components/PostHogWrapper";
 import AuroraBackground from "@/components/background/AuroraBackground";
 
 const interTight = Inter_Tight({
@@ -117,61 +117,96 @@ export default function RootLayout({
             __html: `
 (function() {
   if (window.self === window.top) return;
+
   if (window.__webildEditorInitialized) return;
   window.__webildEditorInitialized = true;
+
   let isActive = false;
   let hoveredElement = null;
   let selectedElement = null;
   let originalContent = null;
   let isEditing = false;
-  let isSaving = false;
-  const actualChanges = [];
-  let listenersAttached = false;
-  const originalValues = new Map();
-  const textElements = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'span', 'a', 'button', 'li', 'div', 'label', 'td', 'th', 'dt', 'dd', 'figcaption', 'blockquote', 'pre', 'code'];
+  let elementTypeLabel = null;
+  let selectedCategoryLabel = null;
+  let hoverOverlay = null;
+  let scrollTimeout = null;
+  let isScrolling = false;
+
+  const textElements = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'span', 'a', 'li', 'label', 'div'];
+  const buttonElements = ['button', 'a', 'div', 'span'];
   const invalidElements = ['html', 'body', 'script', 'style', 'meta', 'link', 'head', 'noscript', 'title'];
   const hoverClass = 'webild-hover';
   const selectedClass = 'webild-selected';
+
   const style = document.createElement('style');
   style.id = 'webild-inspector-styles';
   style.textContent = \`
     .webild-hover {
-      outline: 2px dashed rgba(109, 51, 252, 0.6) !important;
+      outline: 2px dashed rgba(59, 130, 246, 0.7) !important;
       outline-offset: 2px !important;
       cursor: pointer !important;
+      transition: outline 0.15s ease !important;
     }
     .webild-selected {
-      outline: 2px solid rgba(109, 51, 252, 0.9) !important;
+      outline: 2px solid rgba(59, 130, 246, 1) !important;
       outline-offset: 2px !important;
+      transition: outline 0.15s ease !important;
     }
     [contenteditable="true"].webild-selected {
-      outline: 2px solid rgba(59, 130, 246, 0.9) !important;
+      outline: 2px solid rgba(59, 130, 246, 1) !important;
       background-color: rgba(59, 130, 246, 0.05) !important;
+    }
+    .webild-element-type-label {
+      position: fixed;
+      z-index: 999999;
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.95), rgba(37, 99, 235, 0.95));
+      color: white;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      pointer-events: none;
+      white-space: nowrap;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+      letter-spacing: 0.3px;
+    }
+    .webild-selected-category-label {
+      position: fixed;
+      top: 16px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 999998;
+      background: linear-gradient(135deg, rgba(59, 130, 246, 0.95), rgba(37, 99, 235, 0.95));
+      color: white;
+      padding: 10px 20px;
+      border-radius: 8px;
+      font-size: 14px;
+      font-weight: 700;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      pointer-events: none;
+      white-space: nowrap;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.2);
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+    }
+    .webild-hover-overlay {
+      position: fixed !important;
+      background-color: rgba(59, 130, 246, 0.15) !important;
+      border-radius: 4px !important;
+      pointer-events: none !important;
+      z-index: 999998 !important;
+      transition: all 0.15s ease !important;
     }
   \`;
   document.head.appendChild(style);
-  const extractOriginalImageUrl = (src) => {
-    if (!src) return src;
-    if (src.includes('/_next/image?url=')) {
-      try {
-        const urlParams = new URLSearchParams(src.split('?')[1]);
-        const originalUrl = urlParams.get('url');
-        return originalUrl ? decodeURIComponent(originalUrl) : src;
-      } catch (e) {
-        return src;
-      }
-    }
-    if (src.startsWith('http://localhost:') && src.includes('/_next/image?url=')) {
-      try {
-        const urlParams = new URLSearchParams(src.split('?')[1]);
-        const originalUrl = urlParams.get('url');
-        return originalUrl ? decodeURIComponent(originalUrl) : src;
-      } catch (e) {
-        return src;
-      }
-    }
-    return src;
+  
+  const getUniqueSelector = (element) => {
+    const uniqueId = 'webild-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+    element.setAttribute('data-webild-id', uniqueId);
+    return \`[data-webild-id="\${uniqueId}"]\`;
   };
+  
   const getSectionId = (element) => {
     let current = element;
     while (current && current !== document.body) {
@@ -183,54 +218,69 @@ export default function RootLayout({
     }
     return 'hero';
   };
-  const getUniqueSelector = (element) => {
-    const path = [];
-    let current = element;
-    while (current && current !== document.body) {
-      let selector = current.tagName.toLowerCase();
-      if (current.id) {
-        selector = \`#\${current.id}\`;
-        path.unshift(selector);
-        break;
-      }
-      try {
-        let classNameStr = '';
-        if (current.className) {
-          if (typeof current.className === 'string') {
-            classNameStr = current.className;
-          } else if (current.className.baseVal !== undefined) {
-            classNameStr = current.className.baseVal;
-          }
-        }
-        if (classNameStr) {
-          const classes = classNameStr.trim().split(/\s+/).filter(cls =>
-            cls && !cls.startsWith('webild-')
-          );
-          if (classes.length > 0) {
-            selector += '.' + classes.slice(0, 2).join('.');
-          }
-        }
-      } catch (e) {
-      }
-      const parent = current.parentElement;
-      if (parent) {
-        const siblings = Array.from(parent.children).filter(el => el.tagName === current.tagName);
-        if (siblings.length > 1) {
-          const index = siblings.indexOf(current) + 1;
-          selector += \`:nth-of-type(\${index})\`;
-        }
-      }
-      path.unshift(selector);
-      current = parent;
-      if (path.length >= 3) break;
+  
+  const getElementType = (element) => {
+    const tagName = element.tagName.toLowerCase();
+    const computedStyle = window.getComputedStyle(element);
+
+    const sectionId = element.getAttribute('data-section');
+    if (sectionId) {
+      return sectionId.charAt(0).toUpperCase() + sectionId.slice(1);
     }
-    return path.join(' > ');
+
+    if (tagName === 'img') return 'Image';
+
+    const backgroundImage = computedStyle.backgroundImage;
+    if (backgroundImage && backgroundImage !== 'none') {
+      const urlMatch = backgroundImage.match(/url\(['"]?([^'")]+)['"]?\)/);
+      if (urlMatch) {
+        return 'Image';
+      }
+    }
+
+    if (tagName === 'button') {
+      return 'Button';
+    }
+
+    if (tagName === 'a' && element.getAttribute('href')) {
+      return 'Button';
+    }
+
+    if (element.getAttribute('role') === 'button') {
+      return 'Button';
+    }
+
+    const buttonClasses = ['btn', 'button', 'cta', 'action-button'];
+    const hasButtonClass = buttonClasses.some(cls =>
+      element.classList.contains(cls) || element.classList.contains(\`btn-\${cls}\`)
+    );
+
+    if (hasButtonClass && element.textContent && element.textContent.trim().length > 0) {
+      return 'Button';
+    }
+
+    const textTags = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'span', 'label', 'li'];
+    if (textTags.includes(tagName)) {
+      return 'Text';
+    }
+
+    if (tagName === 'div' && element.children.length === 0 && element.textContent && element.textContent.trim()) {
+      return 'Text';
+    }
+
+    if (tagName === 'a' && !element.getAttribute('href')) {
+      return 'Text';
+    }
+
+    return 'Section';
   };
   
   const getElementInfo = (element) => {
     const rect = element.getBoundingClientRect();
     const tagName = element.tagName.toLowerCase();
     const selector = getUniqueSelector(element);
+    const sectionId = getSectionId(element);
+    
     let className = undefined;
     try {
       if (element.className) {
@@ -240,13 +290,15 @@ export default function RootLayout({
           className = element.className.baseVal;
         }
       }
-    } catch (e) {
-    }
+    } catch (e) {}
+    
     const info = {
       tagName: tagName,
       id: element.id || undefined,
       className: className,
       selector: selector,
+      elementType: null,
+      sectionId: sectionId,
       boundingBox: {
         x: rect.left,
         y: rect.top,
@@ -254,107 +306,127 @@ export default function RootLayout({
         height: rect.height
       }
     };
+    
     if (tagName === 'img') {
-      const rawSrc = element.getAttribute('src') || element.src;
-      const originalSrc = extractOriginalImageUrl(rawSrc);
       info.imageData = {
-        src: originalSrc,
+        src: element.src,
         alt: element.alt || undefined,
         naturalWidth: element.naturalWidth,
-        naturalHeight: element.naturalHeight
+        naturalHeight: element.naturalHeight,
+        isBackground: false
       };
     }
+    
     const computedStyle = window.getComputedStyle(element);
     const backgroundImage = computedStyle.backgroundImage;
     if (backgroundImage && backgroundImage !== 'none') {
       const urlMatch = backgroundImage.match(/url\(['"]?([^'")]+)['"]?\)/);
       if (urlMatch) {
-        const bgSrc = extractOriginalImageUrl(urlMatch[1]);
-        info.imageData = {
-          src: bgSrc,
-          isBackground: true
-        };
+        if (tagName !== 'img') {
+          info.imageData = {
+            src: urlMatch[1],
+            isBackground: true
+          };
+        } else {
+          if (!info.imageData) info.imageData = {};
+          info.imageData.backgroundImageSrc = urlMatch[1];
+        }
       }
     }
+    
+    const elementType = getElementType(element);
+    info.elementType = elementType;
+    
+    if (elementType === 'Button') {
+      const buttonText = element.textContent?.trim() || element.value || element.getAttribute('aria-label') || '';
+      const buttonHref = element.getAttribute('href') ||
+                        element.getAttribute('data-href') ||
+                        element.getAttribute('onclick') ||
+                        element.dataset?.link ||
+                        undefined;
+
+      info.buttonData = {
+        text: buttonText,
+        href: buttonHref
+      };
+    }
+
+    if (elementType === 'Text') {
+      info.textContent = element.textContent || '';
+    }
+    
     return info;
   };
-  const isAnimatedTextElement = (element) => {
-    if (!element.className) return false;
-    try {
-      let classNameStr = '';
-      if (typeof element.className === 'string') {
-        classNameStr = element.className;
-      } else if (element.className.baseVal !== undefined) {
-        classNameStr = element.className.baseVal;
-      }
-      if (classNameStr && (
-        classNameStr.includes('slide-char') ||
-        classNameStr.includes('slide-line') ||
-        classNameStr.includes('slide-word') ||
-        classNameStr.includes('fade-char') ||
-        classNameStr.includes('fade-line') ||
-        classNameStr.includes('fade-word')
-      )) {
-        return true;
-      }
-    } catch (e) {
-      // Ignore errors
-    }
-    let parent = element.parentElement;
-    while (parent && parent !== document.body) {
-      if (parent.getAttribute('aria-hidden') === 'true') {
-        return true;
-      }
-      parent = parent.parentElement;
-    }
-    return false;
-  };
+  
   const isValidElement = (element) => {
-    if (!element || !element.tagName) return false;
-    const tagName = element.tagName.toLowerCase();
-    if (invalidElements.includes(tagName)) return false;
-    if (element.classList && element.classList.contains('webild-hover-overlay')) return false;
-    if (isAnimatedTextElement(element)) return false;
-    return true;
+    if (!isActive) return false;
+    const tagName = element.tagName?.toLowerCase();
+    return !invalidElements.includes(tagName);
   };
-  const isTextElement = (element) => {
-    const tagName = element.tagName.toLowerCase();
-    if (!textElements.includes(tagName)) return false;
 
-    if (tagName === 'div' || tagName === 'label' || tagName === 'td' || tagName === 'th') {
-      const hasBlockChildren = Array.from(element.children).some(child => {
-        const childTag = child.tagName.toLowerCase();
-        return ['div', 'section', 'article', 'nav', 'header', 'footer', 'aside', 'main', 'ul', 'ol', 'table', 'form'].includes(childTag);
-      });
-      if (hasBlockChildren) return false;
+  const getMostSpecificElement = (x, y) => {
+    const elements = document.elementsFromPoint(x, y);
+
+    const validElements = elements.filter(el =>
+      isValidElement(el) &&
+      !el.classList.contains('webild-hover-overlay') &&
+      !el.classList.contains('webild-element-type-label') &&
+      !el.classList.contains('webild-selected-category-label')
+    );
+
+    if (validElements.length === 0) return null;
+
+    for (const element of validElements) {
+      const hasDirectContent = element.textContent && element.textContent.trim();
+      const hasImages = element.tagName === 'IMG' || element.querySelector('img');
+      const isInteractive = ['BUTTON', 'A', 'INPUT', 'SELECT', 'TEXTAREA'].includes(element.tagName);
+
+      if (isInteractive || hasImages || (hasDirectContent && element.children.length <= 2)) {
+        return element;
+      }
     }
 
-    return true;
+    return validElements[0];
   };
-  const inputHandlers = new WeakMap();
+
+  const isTextElement = (element) => {
+    const elementType = getElementType(element);
+    return elementType === 'Text';
+  };
+
+  const isButtonElement = (element) => {
+    const elementType = getElementType(element);
+    return elementType === 'Button';
+  };
+  
   const makeEditable = (element, clickEvent) => {
     if (!isTextElement(element)) return;
+    
     originalContent = element.textContent;
     element.contentEditable = 'true';
     element.focus();
     isEditing = true;
+    
     window.parent.postMessage({
       type: 'webild-text-editing-started',
       data: { selector: getElementInfo(element).selector }
     }, '*');
+    
     const handleInput = () => {
       if (element.textContent !== originalContent) {
         window.parent.postMessage({
           type: 'webild-text-changed',
-          data: {
+          data: { 
             selector: getElementInfo(element).selector,
             hasChanges: true
           }
         }, '*');
       }
     };
-    inputHandlers.set(element, handleInput);
+    
     element.addEventListener('input', handleInput);
+    element.dataset.inputHandler = 'true';
+    
     if (clickEvent && element.childNodes.length > 0) {
       const range = document.caretRangeFromPoint(clickEvent.clientX, clickEvent.clientY);
       if (range) {
@@ -364,44 +436,48 @@ export default function RootLayout({
       }
     }
   };
+  
   const makeUneditable = (element, save = false) => {
     if (!element || element.contentEditable !== 'true') return;
+    
     element.contentEditable = 'false';
     isEditing = false;
-    const handler = inputHandlers.get(element);
-    if (handler) {
-      element.removeEventListener('input', handler);
-      inputHandlers.delete(element);
+    
+    if (element.dataset.inputHandler === 'true') {
+      element.removeEventListener('input', () => {});
+      delete element.dataset.inputHandler;
     }
+    
     window.parent.postMessage({
       type: 'webild-text-editing-ended',
       data: { selector: getElementInfo(element).selector }
     }, '*');
+    
     if (save && originalContent !== element.textContent) {
-      const changeData = {
-        selector: getElementInfo(element).selector,
-        type: 'text',
+      const elementInfo = getElementInfo(element);
+      const change = {
+        type: 'updateText',
+        selector: elementInfo.selector,
         oldValue: originalContent,
         newValue: element.textContent,
-        sectionId: getSectionId(element),
-        tagName: element.tagName.toLowerCase()
+        elementType: elementInfo.elementType,
+        sectionId: elementInfo.sectionId,
+        timestamp: Date.now()
       };
-      actualChanges.push(changeData);
+
+      saveChangeToStorage(change);
+
       window.parent.postMessage({
         type: 'webild-element-changed',
-        data: {
-          type: 'updateText',
-          selector: getElementInfo(element).selector,
-          oldValue: originalContent,
-          newValue: element.textContent
-        }
+        data: change
       }, '*');
     } else if (!save && originalContent !== null) {
       element.textContent = originalContent;
     }
+    
     originalContent = null;
   };
-  let hoverOverlay = null;
+  
   const createHoverOverlay = (element) => {
     const rect = element.getBoundingClientRect();
     const overlay = document.createElement('div');
@@ -412,25 +488,73 @@ export default function RootLayout({
       left: \${rect.left - 2}px !important;
       width: \${rect.width + 4}px !important;
       height: \${rect.height + 4}px !important;
-      background-color: rgba(109, 51, 252, 0.25) !important;
-      border-radius: 3px !important;
+      background-color: rgba(90, 113, 230, 0.15) !important;
+      border-radius: 4px !important;
       pointer-events: none !important;
       z-index: 999998 !important;
+      transition: all 0.15s ease !important;
     \`;
     document.body.appendChild(overlay);
     return overlay;
   };
+  
   const removeHoverOverlay = () => {
     if (hoverOverlay) {
       hoverOverlay.remove();
       hoverOverlay = null;
     }
   };
+  
+  const showElementTypeLabel = (element, elementType) => {
+    if (!elementType) return;
+    
+    removeElementTypeLabel();
+    
+    const rect = element.getBoundingClientRect();
+    elementTypeLabel = document.createElement('div');
+    elementTypeLabel.className = 'webild-element-type-label';
+    elementTypeLabel.textContent = elementType;
+    elementTypeLabel.style.cssText = \`
+      left: \${rect.left}px;
+      top: \${rect.top - 32}px;
+    \`;
+    
+    if (rect.top < 40) {
+      elementTypeLabel.style.top = \`\${rect.bottom + 4}px\`;
+    }
+    
+    document.body.appendChild(elementTypeLabel);
+  };
+  
+  const removeElementTypeLabel = () => {
+    if (elementTypeLabel) {
+      elementTypeLabel.remove();
+      elementTypeLabel = null;
+    }
+  };
+  
+  const showSelectedCategoryLabel = (elementType) => {
+    removeSelectedCategoryLabel();
+    if (!elementType) return;
+    
+    selectedCategoryLabel = document.createElement('div');
+    selectedCategoryLabel.className = 'webild-selected-category-label';
+    selectedCategoryLabel.textContent = \`Editing: \${elementType}\`;
+    document.body.appendChild(selectedCategoryLabel);
+  };
+  
+  const removeSelectedCategoryLabel = () => {
+    if (selectedCategoryLabel) {
+      selectedCategoryLabel.remove();
+      selectedCategoryLabel = null;
+    }
+  };
+  
   const handleMouseOver = (e) => {
-    if (!isActive || isSaving) return;
-    
-    const target = e.target;
-    
+    if (!isActive) return;
+
+    const target = getMostSpecificElement(e.clientX, e.clientY) || e.target;
+
     if (!isValidElement(target) || target === hoveredElement || target === selectedElement) {
       return;
     }
@@ -442,6 +566,7 @@ export default function RootLayout({
         delete hoveredElement.dataset.webildOriginalPosition;
       }
       removeHoverOverlay();
+      removeElementTypeLabel();
     }
     
     hoveredElement = target;
@@ -460,12 +585,18 @@ export default function RootLayout({
       hoverOverlay = createHoverOverlay(target);
     }
     
+    const elementType = getElementType(target);
+    showElementTypeLabel(target, elementType);
+    
     window.parent.postMessage({
       type: 'webild-element-hover',
       data: getElementInfo(target)
     }, '*');
   };
+  
   const handleMouseOut = (e) => {
+    if (!isActive) return;
+    
     if (hoveredElement && hoveredElement !== selectedElement) {
       hoveredElement.classList.remove(hoverClass);
       
@@ -475,6 +606,7 @@ export default function RootLayout({
       }
       
       removeHoverOverlay();
+      removeElementTypeLabel();
       
       hoveredElement = null;
       
@@ -484,46 +616,44 @@ export default function RootLayout({
       }, '*');
     }
   };
+  
   const handleClick = (e) => {
-    if (!isActive || isSaving) return;
+    if (!isActive) return;
 
-    const target = e.target;
-
-    if (!isValidElement(target)) return;
-
-    if (isEditing && selectedElement && selectedElement.contentEditable === 'true') {
-      if (target === selectedElement || selectedElement.contains(target)) {
-        return;
-      }
-      makeUneditable(selectedElement, true);
+    if (isEditing) {
+      e.stopPropagation();
+      return;
     }
 
     e.preventDefault();
     e.stopPropagation();
 
+    const target = getMostSpecificElement(e.clientX, e.clientY) || e.target;
+    if (!isValidElement(target)) return;
+    
     if (selectedElement && selectedElement !== target) {
-      if (selectedElement.contentEditable === 'true') {
-        makeUneditable(selectedElement, true);
-      }
+      makeUneditable(selectedElement, false);
       selectedElement.classList.remove(selectedClass);
       selectedElement.classList.remove(hoverClass);
-
+      
       if (selectedElement.dataset.webildOriginalPosition) {
         selectedElement.style.position = selectedElement.dataset.webildOriginalPosition === 'none' ? '' : selectedElement.dataset.webildOriginalPosition;
         delete selectedElement.dataset.webildOriginalPosition;
       }
-
+      
       removeHoverOverlay();
+      removeSelectedCategoryLabel();
     }
-
+    
     if (selectedElement === target) {
       if (target.dataset.webildOriginalPosition) {
         target.style.position = target.dataset.webildOriginalPosition === 'none' ? '' : target.dataset.webildOriginalPosition;
         delete target.dataset.webildOriginalPosition;
       }
-
+      
       removeHoverOverlay();
-
+      removeSelectedCategoryLabel();
+      
       selectedElement = null;
       window.parent.postMessage({
         type: 'webild-element-selected',
@@ -531,27 +661,33 @@ export default function RootLayout({
       }, '*');
       return;
     }
-
+    
     selectedElement = target;
     selectedElement.classList.add(selectedClass);
-
+    
     removeHoverOverlay();
-
+    removeElementTypeLabel();
+    
     if (hoveredElement === target) {
       hoveredElement.classList.remove(hoverClass);
       hoveredElement = null;
     }
-
+    
+    const elementInfo = getElementInfo(target);
+    showSelectedCategoryLabel(elementInfo.elementType);
+    
     window.parent.postMessage({
       type: 'webild-element-selected',
-      data: getElementInfo(target)
+      data: elementInfo
     }, '*');
-
+    
     if (isTextElement(target)) {
       setTimeout(() => makeEditable(target, e), 50);
     }
   };
+  
   const handleKeyDown = (e) => {
+    if (!isActive) return;
     if (!isEditing || !selectedElement) return;
     
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -562,15 +698,17 @@ export default function RootLayout({
       makeUneditable(selectedElement, false);
     }
   };
+  
   const handleBlur = (e) => {
+    if (!isActive) return;
     if (isEditing && selectedElement && e.target === selectedElement) {
       makeUneditable(selectedElement, true);
     }
   };
-  let scrollTimeout = null;
-  let isScrolling = false;
   
   const handleScroll = () => {
+    if (!isActive) return;
+    
     removeHoverOverlay();
     isScrolling = true;
     
@@ -589,8 +727,48 @@ export default function RootLayout({
       type: 'webild-iframe-scroll'
     }, '*');
   };
+  
+  const getStorageKey = () => {
+    const url = new URL(window.location.href);
+    const pathParts = url.pathname.split('/').filter(Boolean);
+    return \`webild-changes-\${pathParts.join('-')}\`;
+  };
+
+  const saveChangeToStorage = (change) => {
+    try {
+      const storageKey = getStorageKey();
+      const existingChanges = JSON.parse(localStorage.getItem(storageKey) || '[]');
+
+      const filteredChanges = existingChanges.filter(c => c.selector !== change.selector);
+      filteredChanges.push(change);
+
+      localStorage.setItem(storageKey, JSON.stringify(filteredChanges));
+
+      window.parent.postMessage({
+        type: 'webild-change-saved-locally',
+        data: { change, allChanges: filteredChanges }
+      }, '*');
+    } catch (error) {
+      console.error('Failed to save change to localStorage:', error);
+    }
+  };
+
+  const clearLocalChanges = () => {
+    try {
+      const storageKey = getStorageKey();
+      localStorage.removeItem(storageKey);
+      window.parent.postMessage({
+        type: 'webild-local-changes-cleared',
+        data: {}
+      }, '*');
+    } catch (error) {
+      console.error('Failed to clear local changes:', error);
+    }
+  };
+
   const handleMessage = (e) => {
     if (!e.data || !e.data.type) return;
+
     if (e.data.type === 'webild-activate-editor') {
       if (!isActive) {
         isActive = true;
@@ -598,9 +776,11 @@ export default function RootLayout({
       }
       return;
     }
+
     if (e.data.type === 'webild-deactivate-editor') {
       if (isActive) {
         isActive = false;
+
         if (selectedElement) {
           makeUneditable(selectedElement, false);
           selectedElement.classList.remove(selectedClass);
@@ -610,309 +790,148 @@ export default function RootLayout({
           hoveredElement.classList.remove(hoverClass);
           hoveredElement = null;
         }
+
         removeHoverOverlay();
+        removeElementTypeLabel();
+        removeSelectedCategoryLabel();
         window.parent.postMessage({ type: 'webild-editor-deactivated' }, '*');
       }
       return;
     }
-    if (e.data.type === 'webild-set-saving') {
-      isSaving = e.data.data.isSaving;
-      if (isSaving && selectedElement) {
-        makeUneditable(selectedElement, false);
-        selectedElement.classList.remove(selectedClass);
-        selectedElement = null;
-      }
-      if (isSaving && hoveredElement) {
-        hoveredElement.classList.remove(hoverClass);
-        hoveredElement = null;
-        removeHoverOverlay();
-      }
+
+    if (e.data.type === 'webild-clear-local-changes') {
+      clearLocalChanges();
       return;
     }
-    if (e.data.type === 'webild-disable-current-editing') {
-      if (selectedElement) {
-        makeUneditable(selectedElement, false);
-        selectedElement.classList.remove(selectedClass);
-        selectedElement = null;
-      }
-      if (hoveredElement) {
-        hoveredElement.classList.remove(hoverClass);
-        hoveredElement = null;
-        removeHoverOverlay();
-      }
-      return;
-    }
-    if (e.data.type === 'webild-get-changes') {
-      if (selectedElement && selectedElement.contentEditable === 'true') {
-        makeUneditable(selectedElement, true);
-      }
-      console.log('[Visual Editor] Sending changes to parent:', actualChanges.length, actualChanges);
-      window.parent.postMessage({
-        type: 'webild-changes-data',
-        data: [...actualChanges]
-      }, '*');
-      actualChanges.length = 0;
-      originalValues.clear();
-      if (selectedElement) {
-        selectedElement.classList.remove(selectedClass);
-        selectedElement = null;
-      }
-      if (hoveredElement) {
-        hoveredElement.classList.remove(hoverClass);
-        hoveredElement = null;
-      }
-      removeHoverOverlay();
-      return;
-    }
-    if (e.data.type === 'webild-apply-changes') {
-      const changes = e.data.data;
-      if (!changes || !Array.isArray(changes)) return;
-      changes.forEach(change => {
-        try {
-          const element = document.querySelector(change.selector);
-          if (!element) return;
-          if (change.type === 'text' && change.content !== undefined) {
-            element.textContent = change.content;
-          } else if (change.type === 'image' && change.src) {
-            if (element.tagName === 'IMG') {
-              element.src = change.src;
-              if (change.alt !== undefined) {
-                element.alt = change.alt;
-              }
-            }
-          } else if (change.type === 'backgroundImage' && change.src) {
-            element.style.backgroundImage = \`url('\${change.src}')\`;
-          }
-        } catch (err) {
+
+    if (!isActive) return;
+    
+    if (e.data.type === 'webild-update-text') {
+      const { selector, newValue } = e.data.data;
+      try {
+        const element = document.querySelector(selector);
+        if (element && isTextElement(element)) {
+          element.textContent = newValue;
         }
-      });
-      window.parent.postMessage({
-        type: 'webild-changes-applied',
-        data: { count: changes.length }
-      }, '*');
+      } catch (error) {
+        console.error('[Webild] Invalid selector for text update:', selector, error);
+      }
       return;
     }
+
+    if (e.data.type === 'webild-update-button') {
+      const { selector, text, href } = e.data.data;
+      try {
+        const element = document.querySelector(selector);
+        if (element && isButtonElement(element)) {
+          if (text !== undefined) {
+            element.textContent = text;
+          }
+          if (href !== undefined) {
+            if (element.tagName.toLowerCase() === 'a') {
+              element.href = href;
+            } else {
+              element.setAttribute('data-href', href);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('[Webild] Invalid selector for button update:', selector, error);
+      }
+      return;
+    }
+
     if (e.data.type === 'webild-replace-image') {
       const { selector, newSrc, isBackground } = e.data.data;
-      console.log('[Visual Editor] Received image replacement:', { selector, newSrc, isBackground });
+      let element = null;
 
-      // Enhanced element finding with better error handling
-      let element = document.querySelector(selector);
-      let fallbackUsed = false;
+      try {
+        element = document.querySelector(selector);
+      } catch (error) {
+        console.error('[Webild] Invalid selector for image replacement:', selector, error);
+        window.parent.postMessage({
+          type: 'webild-image-replacement-error',
+          data: { selector, message: 'Invalid selector: ' + error.message, success: false }
+        }, '*');
+        return;
+      }
 
       if (!element) {
-        console.log('[Visual Editor] Primary selector failed, trying fallbacks...');
-
-        // Try simplified selector without nth-of-type
-        const simplifiedSelector = selector.replace(/:nth-of-type\(\d+\)/g, '');
-        element = document.querySelector(simplifiedSelector);
-        if (element) {
-          console.log('[Visual Editor] Found element with simplified selector');
-          fallbackUsed = true;
-        }
-
-        // Try section-based fallback
-        if (!element) {
-          const sectionMatch = selector.match(/#([a-z-]+)/);
-          if (sectionMatch) {
-            const sectionId = sectionMatch[1];
-            const section = document.getElementById(sectionId);
-            if (section) {
-              element = section.querySelector('img') || section.querySelector('[style*="background-image"]');
-              if (element) {
-                console.log('[Visual Editor] Found element in section:', sectionId);
-                fallbackUsed = true;
-              }
-            }
-          }
-        }
-
-        // Try finding by tag type in the document
-        if (!element && !isBackground) {
-          const images = document.querySelectorAll('img');
-          if (images.length === 1) {
-            element = images[0];
-            console.log('[Visual Editor] Using single image element as fallback');
-            fallbackUsed = true;
-          }
-        }
-
-        if (!element) {
-          console.error('[Visual Editor] Element not found for selector:', selector);
-          window.parent.postMessage({
-            type: 'webild-image-replacement-error',
-            data: {
-              selector,
-              error: 'Element not found',
-              message: 'Could not find the target element for image replacement'
-            }
-          }, '*');
-          return;
-        }
-      }
-      if (element) {
-        console.log('[Visual Editor] Found element, replacing image:', element.tagName, fallbackUsed ? '(using fallback)' : '');
-
-        // Validate the new image URL
-        if (!newSrc || typeof newSrc !== 'string') {
-          console.error('[Visual Editor] Invalid image URL provided:', newSrc);
-          window.parent.postMessage({
-            type: 'webild-image-replacement-error',
-            data: {
-              selector,
-              error: 'Invalid URL',
-              message: 'The provided image URL is invalid'
-            }
-          }, '*');
-          return;
-        }
-
-        let oldSrc = '';
-
-        try {
-          if (isBackground) {
-            const elementSelector = getUniqueSelector(element);
-            if (!originalValues.has(elementSelector)) {
-              const style = window.getComputedStyle(element);
-              const bgImage = style.backgroundImage;
-              if (bgImage && bgImage !== 'none') {
-                const urlMatch = bgImage.match(/url\(['"]?([^'")]+)['"]?\)/);
-                if (urlMatch) {
-                  oldSrc = extractOriginalImageUrl(urlMatch[1]);
-                }
-              }
-              originalValues.set(elementSelector, oldSrc || '');
-            }
-            oldSrc = originalValues.get(elementSelector) || '';
-            element.style.backgroundImage = \`url('\${newSrc}')\`;
-            console.log('[Visual Editor] ✅ Background image replaced:', newSrc);
-            const change = {
-              selector: elementSelector,
-              type: 'backgroundImage',
-              oldValue: String(oldSrc),
-              newValue: String(newSrc),
-              sectionId: getSectionId(element),
-              src: newSrc
-            };
-            actualChanges.push(change);
-            console.log('[Visual Editor] Added background image change to actualChanges:', change);
-            console.log('[Visual Editor] Total changes now:', actualChanges.length);
-          } else if (element.tagName === 'IMG') {
-            const elementSelector = getUniqueSelector(element);
-            if (!originalValues.has(elementSelector)) {
-              const rawSrc = element.getAttribute('src') || element.src;
-              const originalSrc = extractOriginalImageUrl(rawSrc);
-              originalValues.set(elementSelector, originalSrc || '');
-            }
-            oldSrc = originalValues.get(elementSelector) || '';
-            if (!oldSrc) {
-              const rawSrc = element.getAttribute('src') || element.src;
-              const currentSrc = extractOriginalImageUrl(rawSrc);
-              oldSrc = currentSrc || '';
-              originalValues.set(elementSelector, oldSrc);
-            }
-
-            // Set up error handling for image loading
-            const handleImageLoad = () => {
-              console.log('[Visual Editor] ✅ Image loaded successfully:', newSrc);
-              window.parent.postMessage({
-                type: 'webild-image-replaced',
-                data: { selector, newSrc, oldSrc, success: true }
-              }, '*');
-            };
-
-            const handleImageError = () => {
-              console.error('[Visual Editor] ❌ Failed to load image:', newSrc);
-              // Revert to old image
-              if (oldSrc) {
-                element.src = oldSrc;
-                element.setAttribute('src', oldSrc);
-              }
-              window.parent.postMessage({
-                type: 'webild-image-replacement-error',
-                data: {
-                  selector,
-                  error: 'Image load failed',
-                  message: 'The new image could not be loaded. Reverted to original image.',
-                  newSrc,
-                  oldSrc
-                }
-              }, '*');
-            };
-
-            // Add event listeners before changing src
-            element.addEventListener('load', handleImageLoad, { once: true });
-            element.addEventListener('error', handleImageError, { once: true });
-
-            element.src = newSrc;
-            element.setAttribute('src', newSrc);
-            element.srcset = '';
-            element.removeAttribute('srcset');
-            element.style.display = 'none';
-            void element.offsetHeight;
-            element.style.display = '';
-
-            const change = {
-              selector: elementSelector,
-              type: 'image',
-              oldValue: String(oldSrc),
-              newValue: String(newSrc),
-              sectionId: getSectionId(element),
-              src: newSrc,
-              alt: element.alt
-            };
-            actualChanges.push(change);
-            console.log('[Visual Editor] Added image change to actualChanges:', change);
-            console.log('[Visual Editor] Total changes now:', actualChanges.length);
-          } else {
-            console.warn('[Visual Editor] Element is not an image or background element:', element.tagName);
-            window.parent.postMessage({
-              type: 'webild-image-replacement-error',
-              data: {
-                selector,
-                error: 'Invalid element type',
-                message: \`Cannot replace image on \${element.tagName} element\`
-              }
-            }, '*');
-          }
-        } catch (error) {
-          console.error('[Visual Editor] Error during image replacement:', error);
-          window.parent.postMessage({
-            type: 'webild-image-replacement-error',
-            data: {
-              selector,
-              error: 'Replacement failed',
-              message: 'An error occurred during image replacement: ' + error.message
-            }
-          }, '*');
-        }
-      }
-    }
-    if (e.data.type === 'webild-delete-element') {
-      const { selector } = e.data.data;
-      const element = document.querySelector(selector);
-      if (element) {
-        const oldHTML = element.outerHTML;
-        const sectionId = getSectionId(element);
-        element.remove();
-        actualChanges.push({
-          selector: selector,
-          type: 'delete',
-          oldValue: oldHTML,
-          newValue: '',
-          sectionId: sectionId,
-        });
         window.parent.postMessage({
-          type: 'webild-element-deleted',
-          data: { selector }
+          type: 'webild-image-replacement-error',
+          data: { selector, message: 'Element not found', success: false }
+        }, '*');
+        return;
+      }
+
+      try {
+        let replaced = false;
+        let oldValue = '';
+
+        if (isBackground) {
+          oldValue = window.getComputedStyle(element).backgroundImage;
+          element.style.backgroundImage = \`url('\${newSrc}')\`;
+          replaced = true;
+        } else if (element.tagName.toLowerCase() === 'img') {
+          oldValue = element.src;
+          element.src = newSrc;
+          replaced = true;
+        } else {
+          const hasBackgroundImage = window.getComputedStyle(element).backgroundImage !== 'none';
+          if (hasBackgroundImage) {
+            oldValue = window.getComputedStyle(element).backgroundImage;
+            element.style.backgroundImage = \`url('\${newSrc}')\`;
+            replaced = true;
+          }
+        }
+
+        if (replaced) {
+          const elementInfo = getElementInfo(element);
+
+          let cleanOldValue = oldValue;
+          if (oldValue.includes('url(')) {
+            const urlMatch = oldValue.match(/url\(['"]?([^'")]+)['"]?\)/);
+            if (urlMatch) {
+              cleanOldValue = urlMatch[1];
+            }
+          }
+
+          const change = {
+            type: 'replaceImage',
+            selector: selector,
+            oldValue: cleanOldValue,
+            newValue: newSrc,
+            elementType: elementInfo.elementType,
+            sectionId: elementInfo.sectionId,
+            timestamp: Date.now()
+          };
+
+          saveChangeToStorage(change);
+
+          window.parent.postMessage({
+            type: 'webild-element-changed',
+            data: change
+          }, '*');
+
+          window.parent.postMessage({
+            type: 'webild-image-replaced',
+            data: { selector, newSrc, success: true }
+          }, '*');
+        } else {
+          window.parent.postMessage({
+            type: 'webild-image-replacement-error',
+            data: { selector, message: 'Could not determine how to replace image', success: false }
+          }, '*');
+        }
+      } catch (error) {
+        window.parent.postMessage({
+          type: 'webild-image-replacement-error',
+          data: { selector, message: error.message || 'Failed to replace image', success: false }
         }, '*');
       }
     }
-    if (e.data.type === 'webild-cancel-changes') {
-      actualChanges.length = 0;
-      window.location.reload();
-    }
   };
+  
   document.addEventListener('mouseover', handleMouseOver, true);
   document.addEventListener('mouseout', handleMouseOut, true);
   document.addEventListener('click', handleClick, true);
@@ -920,12 +939,18 @@ export default function RootLayout({
   document.addEventListener('blur', handleBlur, true);
   window.addEventListener('scroll', handleScroll, true);
   window.addEventListener('message', handleMessage, true);
+  
   window.webildCleanup = () => {
     isActive = false;
+    
     if (selectedElement) {
       makeUneditable(selectedElement, false);
     }
+    
     removeHoverOverlay();
+    removeElementTypeLabel();
+    removeSelectedCategoryLabel();
+    
     document.removeEventListener('mouseover', handleMouseOver, true);
     document.removeEventListener('mouseout', handleMouseOut, true);
     document.removeEventListener('click', handleClick, true);
@@ -933,17 +958,21 @@ export default function RootLayout({
     document.removeEventListener('blur', handleBlur, true);
     window.removeEventListener('scroll', handleScroll, true);
     window.removeEventListener('message', handleMessage, true);
+    
     document.querySelectorAll('.' + hoverClass).forEach(el => {
       el.classList.remove(hoverClass);
     });
     document.querySelectorAll('.' + selectedClass).forEach(el => {
       el.classList.remove(selectedClass);
     });
+    
     const styleEl = document.getElementById('webild-inspector-styles');
     if (styleEl) styleEl.remove();
+    
     hoveredElement = null;
     selectedElement = null;
   };
+  
   window.parent.postMessage({ type: 'webild-editor-ready' }, '*');
 })();
 `
